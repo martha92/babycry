@@ -1,0 +1,30 @@
+import os
+import IPython.display as ipd
+import librosa
+import numpy as np
+import pandas as pd
+import glob
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import LabelEncoder
+ipd.Audio("sample_dk.wav")
+#load audio as numpy array(audio file as numpy array object and sampling eate with which its extracted)
+data,sample_rate = librosa.load('021DCB9F-2FC6-4247-859F-E58EDB682B79-1429977261-1.0-f-26-dk.wav')
+print(data, sample_rate)
+#plt.figure(figsize=(12,4))
+#librosa.display.waveplot(data, sr=sample_rate)
+
+#load audio files and extract features
+def parser(row):
+    file_name=os.path.join(os.path.abspath(data_dir),'filename'+'.wav')
+    #file corrupted?
+    try:
+        x,sample_rate=librosa.load(filename,res_type='kaiser_fast') # technique to extract faster
+        mfccs=np.mean(librosa.feature.mfcc(y=x, sr=sample_rate, n_mfcc=40).T,axis=0)
+    except Exception as e:
+        print("Error encountered while parsing file: ", file)
+        return None,None
+    feature=mfccs
+    label=row.class
+
+temp=train.apply(parser, axis=1)
+temp.columns = ['feature','label']
