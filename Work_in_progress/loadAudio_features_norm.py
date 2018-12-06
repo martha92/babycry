@@ -59,16 +59,58 @@ def load_audio(filename, mono=False, fs=44100):
     return None, None
 
 
-def extract_mbe(_y, _sr, _nfft, _nb_mel):
-    # spec, n_fft = librosa.core.spectrum._spectrogram(y=_y, n_fft=_nfft, hop_length= 1024, power=2)
-    # mel_basis = librosa.filters.mel(sr=_sr, n_fft=_nfft, n_mels=_nb_mel)
-    # return np.log(np.dot(mel_basis, spec))
-    spec = librosa.feature.melspectrogram(_y, sr=_sr, n_fft=nfft, hop_length=1024,
-                                          n_mels=_nb_mel, fmax=22050, power=int(1))
-    spec = librosa.power_to_db(spec)
-    print(spec)
+def getTestLabels(evaluate_file):
+    label_dict = {}
+    tmp_dict = {}
+    index = 0
+    for line in open(evaluate_file):
+        name_file = line.split('.wav')
+        name = name_file[0]
+        name_dict = name + ".wav"
+        label_info = name.split('-')
+        size_tmp = len(label_info)
+        _label = label_info[size_tmp - 1]
+        if name_dict not in tmp_dict:
+            str_index = str(index)
+            label_dict[str_index] = [name_dict, _label]
+            tmp_dict[name_dict] = name_dict
+            index += 1
+    print(label_dict)
+    return label_dict
 
-    return spec
+
+def load_desc_file(_desc_file):
+    _desc_dict = dict()
+    for line in open(_desc_file):
+        name_file = line.split('.wav')
+        name = name_file[0]
+        name_dict = name + ".wav"
+        label_info = name.split('-')
+        size_tmp = len(label_info)
+        _label = label_info[size_tmp - 1]
+        # print(_label)
+        words = line.strip().split('\t')
+        # print(words)
+        if name_dict not in _desc_dict:
+            _desc_dict[name_dict] = list()
+        _desc_dict[name_dict].append([float(words[1]), float(words[2]), __class_labels[_label]])
+    return _desc_dict
+
+
+def extract_mbe(_y, _sr, _nfft, _nb_mel):
+    spec, n_fft = librosa.core.spectrum._spectrogram(y=_y, n_fft=_nfft, hop_length=1024, power=1)
+    mel_basis = librosa.filters.mel(sr=_sr, n_fft=_nfft, n_mels=_nb_mel)
+    # print(np.log(np.dot(mel_basis, spec)))
+
+    x = np.log(np.dot(mel_basis, spec))
+    # print(numpy.ma.masked_invalid(x).filled(0))
+    return numpy.ma.masked_invalid(x).filled(0)
+    # spec = librosa.feature.melspectrogram(_y, sr=_sr, n_fft= nfft, hop_length= 1024,
+    #                                          n_mels=_nb_mel, fmax=22050, power=int(1))
+    # spec = librosa.power_to_db(spec)
+    # print(spec)
+
+    # return spec
 
 
 # ###################################################################
@@ -90,7 +132,8 @@ __class_labels = {
 }
 
 # location of data.
-folds_list = [1, 2, 3, 4]
+# folds_list = [1, 2, 3, 4]
+folds_list = [1]
 evaluation_setup_folder = '/Users/marthagarcia/Documents/SFU_Master_BigData/Semester_1/Machine_Learning/Final_project/babycry/evaluation_folder'
 audio_folder = '/Users/marthagarcia/Documents/SFU_Master_BigData/Semester_1/Machine_Learning/Final_project/babycry/Data/New_WAV'
 
@@ -108,26 +151,14 @@ sr = 44100
 # -----------------------------------------------------------------------
 # Feature extraction and label generation
 # -----------------------------------------------------------------------
-# Load labels
-desc_dict = {}
-for audio_filename in os.listdir(audio_folder):
-    name_file = audio_filename.split('.wav')
-    name = name_file[0]
-    print(name)
-    label_info = name.split('-')
-    size_tmp = len(label_info)
-    _label = label_info[size_tmp - 1]
-    age = label_info[size_tmp - 2]
-
-    if name not in desc_dict:
-        desc_dict[name] = [1, int(age), __class_labels[_label]]
-
-# train_file = os.path.join(evaluation_setup_folder, 'street_fold{}_train.txt'.format(1))
-# evaluate_file = os.path.join(evaluation_setup_folder, 'street_fold{}_evaluate.txt'.format(1))
-# desc_dict = load_desc_file(train_file)
-# desc_dict.update(load_desc_file(evaluate_file)) # contains labels for all the audio in the dataset
 
 
+train_file = os.path.join(evaluation_setup_folder, 'fold1_train.txt'.format(1))
+evaluate_file = os.path.join(evaluation_setup_folder, 'fold1_evaluate.txt'.format(1))
+desc_dict = load_desc_file(train_file)
+desc_dict.update(load_desc_file(evaluate_file))
+
+print(desc_dict)
 # Extract features for all audio files, and save it along with labels
 for audio_filename in os.listdir(audio_folder):
     audio_file = os.path.join(audio_folder, audio_filename)
@@ -146,34 +177,33 @@ for audio_filename in os.listdir(audio_folder):
                 mbe = np.concatenate((mbe, mbe_ch), 1)
 
     label = np.zeros((mbe.shape[0], len(__class_labels)))
-    name_file = audio_filename.split('.wav')
-    name = name_file[0]
-    tmp_data = np.array(desc_dict[name])
-
-    frame_start = np.floor(1 * sr / hop_len).astype(int)
-    frame_end = np.ceil(26 * sr / hop_len).astype(int)
-    # print(tmp_data[2:3])
-    se_class = tmp_data[2:3].astype(int)
-    # for ind, val in enumerate(se_class):
-    #    label[frame_start[ind]:frame_end[ind], val] = 1
+    print(audio_filename)
+    tmp_data = np.array(desc_dict[audio_filename])
+    frame_start = np.floor(tmp_data[:, 0] * sr / hop_len).astype(int)
+    frame_end = np.ceil(tmp_data[:, 1] * sr / hop_len).astype(int)
+    se_class = tmp_data[:, 2].astype(int)
+    for ind, val in enumerate(se_class):
+        label[frame_start[ind]:frame_end[ind], val] = 1
     tmp_feat_file = os.path.join(feat_folder, '{}_{}.npz'.format(audio_filename, 'mon' if is_mono else 'bin'))
+    # print(tmp_feat_file)
+    # print(mbe)
+    # print(label)
     np.savez(tmp_feat_file, mbe, label)
-    # np.savez(mbe, label)
 
 # -----------------------------------------------------------------------
 # Feature Normalization
 # -----------------------------------------------------------------------
 
 for fold in folds_list:
-    # train_file = os.path.join(evaluation_setup_folder, 'street_fold{}_train.txt'.format(1))
-    # evaluate_file = os.path.join(evaluation_setup_folder, 'street_fold{}_evaluate.txt'.format(1))
-    train_dict = desc_dict
-    test_dict = desc_dict
+    train_file = os.path.join(evaluation_setup_folder, 'fold1_train.txt'.format(1))
+    evaluate_file = os.path.join(evaluation_setup_folder, 'fold1_evaluate.txt'.format(1))
+    train_dict = load_desc_file(train_file)
+    test_dict = load_desc_file(evaluate_file)
+    test_labels = getTestLabels(evaluate_file)
 
     X_train, Y_train, X_test, Y_test = None, None, None, None
     for key in train_dict.keys():
-        tmp_feat_file = os.path.join(feat_folder, (key + ".wav_bin.npz"))
-
+        tmp_feat_file = os.path.join(feat_folder, (key + "_bin.npz"))
         dmp = np.load(tmp_feat_file)
         tmp_mbe, tmp_label = dmp['arr_0'], dmp['arr_1']
         if X_train is None:
@@ -182,7 +212,7 @@ for fold in folds_list:
             X_train, Y_train = np.concatenate((X_train, tmp_mbe), 0), np.concatenate((Y_train, tmp_label), 0)
 
     for key in test_dict.keys():
-        tmp_feat_file = os.path.join(feat_folder, (key + ".wav_bin.npz"))
+        tmp_feat_file = os.path.join(feat_folder, (key + "_bin.npz"))
         dmp = np.load(tmp_feat_file)
         tmp_mbe, tmp_label = dmp['arr_0'], dmp['arr_1']
         if X_test is None:
@@ -190,11 +220,13 @@ for fold in folds_list:
         else:
             X_test, Y_test = np.concatenate((X_test, tmp_mbe), 0), np.concatenate((Y_test, tmp_label), 0)
 
+    # print(numpy.isfinite(X_train.all()) )
+    # print(numpy.isnan(X_train).any())
     # Normalize the training data, and scale the testing data using the training data weights
     scaler = preprocessing.StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
-    normalized_feat_file = os.path.join(feat_folder, 'mbe_{}_fold{}.npz'.format('mon' if is_mono else 'bin', fold))
-    np.savez(normalized_feat_file, X_train, Y_train, X_test, Y_test)
+    normalized_feat_file = os.path.join(feat_folder, 'mbe_{}_fold1.npz'.format('mon' if is_mono else 'bin', fold))
+    np.savez(normalized_feat_file, X_train, Y_train, X_test, Y_test, test_labels)
     print('normalized_feat_file : {}'.format(normalized_feat_file))
