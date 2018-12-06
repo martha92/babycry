@@ -8,7 +8,12 @@ from keras.layers import Bidirectional, TimeDistributed, Conv2D, MaxPooling2D, I
     Reshape, Permute
 from keras.layers.normalization import BatchNormalization
 from keras.models import Model
+from keras.layers import merge, Flatten
+from keras_self_attention import SeqSelfAttention
+from keras import backend as K
+import keras.utils.np_utils as kerasutils
 from sklearn.metrics import confusion_matrix
+import keras
 import metrics
 import utils
 from IPython import embed
@@ -18,32 +23,67 @@ K.set_image_data_format('channels_first')
 plot.switch_backend('agg')
 sys.setrecursionlimit(10000)
 
+__class_labels = {
+    0: 'hu',
+    1: 'bu',
+    2: 'bp',
+    3: 'dc',
+    4: 'ti',
+    5: 'lo',
+    6: 'ch',
+    7: 'sc',
+    8: 'dk'
+
+}
+
+__class_labels_desc = {
+    'hu': 'hungry',
+    'bu': 'needs burping',
+    'bp': 'belly pain',
+    'dc': 'discomfort',
+    'ti': 'tired',
+    'lo': 'lonely',
+    'ch': 'cold/hot',
+    'sc': 'scared',
+    'dk': 'dont know'
+
+}
+
 
 def load_data(_feat_folder, _mono, _fold=None):
     feat_file_fold = os.path.join(_feat_folder, 'mbe_{}_fold{}.npz'.format('mon' if _mono else 'bin', _fold))
     dmp = np.load(feat_file_fold)
-    _X_train, _Y_train, _X_test, _Y_test = dmp['arr_0'], dmp['arr_1'], dmp['arr_2'], dmp['arr_3']
-    return _X_train, _Y_train, _X_test, _Y_test
+    _X_train, _Y_train, _X_test, _Y_test, test_labels = dmp['arr_0'], dmp['arr_1'], dmp['arr_2'], dmp['arr_3'], dmp[
+        'arr_4']
+    return _X_train, _Y_train, _X_test, _Y_test, test_labels
 
 
 def get_model(data_in, data_out, _cnn_nb_filt, _cnn_pool_size, _rnn_nb, _fc_nb):
     spec_start = Input(shape=(data_in.shape[-3], data_in.shape[-2], data_in.shape[-1]))
     spec_x = spec_start
+
+    ##CNN
     for _i, _cnt in enumerate(_cnn_pool_size):
         spec_x = Conv2D(filters=_cnn_nb_filt, kernel_size=(3, 3), padding='same')(spec_x)
         spec_x = BatchNormalization(axis=1)(spec_x)
-        spec_x = Activation('relu')(spec_x)
+        spec_x = Activation('softmax')(spec_x)
         spec_x = MaxPooling2D(pool_size=(1, _cnn_pool_size[_i]))(spec_x)
         spec_x = Dropout(dropout_rate)(spec_x)
     spec_x = Permute((2, 1, 3))(spec_x)
     spec_x = Reshape((data_in.shape[-2], -1))(spec_x)
 
+    # RNN
     for _r in _rnn_nb:
+        # spec_x = attention_3d_block(spec_x)
         spec_x = Bidirectional(
             GRU(_r, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate, return_sequences=True),
             merge_mode='mul')(spec_x)
+        # ATTENTION LAYER!!! un-comment this line to compare performance.
+        # spec_x = SeqSelfAttention(attention_activation='softmax')(spec_x)  #, attention_type=SeqSelfAttention.ATTENTION_TYPE_MUL
 
+    # FC
     for _f in _fc_nb:
+        print("fc layer")
         spec_x = TimeDistributed(Dense(_f))(spec_x)
         spec_x = Dropout(dropout_rate)(spec_x)
 
@@ -89,6 +129,28 @@ def preprocess_data(_X, _Y, _X_test, _Y_test, _seq_len, _nb_ch):
     return _X, _Y, _X_test, _Y_test
 
 
+def getLabels(pred_labels, test_labels):
+    index = 0
+    filename = ""
+    actual_label = ""
+    for arr in pred_labels:
+        _lblwithhigherprob = np.bincount(arr).argmax()
+        get_label = __class_labels.get(_lblwithhigherprob)
+        get_label_desc = __class_labels_desc.get(get_label)
+        # print(test_labels[''])
+        for key, value in dict(np.ndenumerate(test_labels)).items():
+            # value = dict()
+            _index = str(index)
+            filename = value.get(_index)[0]
+            actual_label = value.get(_index)[1]
+            index += 1
+        # info_test = test_labels.get(index)
+        print(
+            "File Name-> " + filename + " Predicted label-> " + get_label_desc + " Actual label-> " + __class_labels_desc.get(
+                actual_label))
+        # print(dict(np.ndenumerate(test_labels)).item().keys())
+
+
 #######################################################################################
 # MAIN SCRIPT STARTS HERE
 #######################################################################################
@@ -101,7 +163,7 @@ __fig_name = '{}_{}'.format('mon' if is_mono else 'bin', time.strftime("%Y_%m_%d
 nb_ch = 1 if is_mono else 2
 batch_size = 128  # Decrease this if you want to run on smaller GPU's
 seq_len = 256  # Frame sequence length. Input to the CRNN.
-nb_epoch = 500  # Training epochs
+nb_epoch = 20  # Training epochs
 patience = int(0.25 * nb_epoch)  # Patience for early stopping
 
 # Number of frames in 1 second, required to calculate F and ER for 1 sec segments.
@@ -129,12 +191,13 @@ print('MODEL PARAMETERS:\n cnn_nb_filt: {}, cnn_pool_size: {}, rnn_nb: {}, fc_nb
 
 avg_er = list()
 avg_f1 = list()
-for fold in [1, 2, 3, 4]:
+predicted_labels = {}
+for fold in [1]:
     print('\n\n----------------------------------------------')
     print('FOLD: {}'.format(fold))
     print('----------------------------------------------\n')
     # Load feature and labels, pre-process it
-    X, Y, X_test, Y_test = load_data(feat_folder, is_mono, fold)
+    X, Y, X_test, Y_test, test_labels = load_data(feat_folder, is_mono, fold)
 
     X, Y, X_test, Y_test = preprocess_data(X, Y, X_test, Y_test, seq_len, nb_ch)
 
@@ -160,6 +223,10 @@ for fold in [1, 2, 3, 4]:
 
         # Calculate the predictions on test data, in order to calculate ER and F scores
         pred = model.predict(X_test)
+        pred_labels = (pred.argmax(axis=-1))
+        getLabels(pred_labels, test_labels)
+        # print (np.bincount(pred).argmax())
+
         pred_thresh = pred > posterior_thresh
         score_list = metrics.compute_scores(pred_thresh, Y_test, frames_in_1_sec=frames_1_sec)
 
