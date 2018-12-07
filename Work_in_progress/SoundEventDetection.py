@@ -66,7 +66,7 @@ def get_model(data_in, data_out, _cnn_nb_filt, _cnn_pool_size, _rnn_nb, _fc_nb):
     for _i, _cnt in enumerate(_cnn_pool_size):
         spec_x = Conv2D(filters=_cnn_nb_filt, kernel_size=(3, 3), padding='same')(spec_x)
         spec_x = BatchNormalization(axis=1)(spec_x)
-        spec_x = Activation('softmax')(spec_x)
+        spec_x = Activation('relu')(spec_x)
         spec_x = MaxPooling2D(pool_size=(1, _cnn_pool_size[_i]))(spec_x)
         spec_x = Dropout(dropout_rate)(spec_x)
     spec_x = Permute((2, 1, 3))(spec_x)
