@@ -210,7 +210,6 @@ for fold in [1]:
         0] * nb_epoch
     posterior_thresh = 0.5
     path = '{}_fold_{}_model.h5'.format(__fig_name, '1')
-    f = open('/content/gdrive/My Drive/ML_FinalProject/models_Multi_AM/' + path, 'w')
 
     for i in range(nb_epoch):
         print('Epoch : {} '.format(i), end='')
@@ -271,7 +270,6 @@ for fold in [1]:
         best_epoch, best_er, f1_for_best_er))
     print('best_conf_mat: {}'.format(best_conf_mat))
     # print('best_conf_mat_diag: {}'.format(np.diag(best_conf_mat)))
-f.close()
 
 print('\n\nMETRICS : avg_er: {}, avg_f1: {}'.format(avg_er, avg_f1))
 print('MODEL AVERAGE : avg_er: {}, avg_f1: {}'.format(np.mean(avg_er), np.mean(avg_f1)))
