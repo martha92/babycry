@@ -4,10 +4,13 @@ import os
 import numpy as np
 import time
 import sys
+import json
+import keras
 import matplotlib.pyplot as plot
 from keras.layers import Bidirectional, TimeDistributed, Conv2D, MaxPooling2D, Input, GRU, Dense, Activation, Dropout, \
     Reshape, Permute
 from keras.layers.normalization import BatchNormalization
+from keras_self_attention import SeqSelfAttention
 from keras.models import Model
 from sklearn.metrics import confusion_matrix
 import metrics
@@ -22,12 +25,39 @@ from google.colab import drive
 
 drive.mount('/content/gdrive')
 
+__class_labels = {
+    0: 'hu',
+    1: 'bu',
+    2: 'bp',
+    3: 'dc',
+    4: 'ti',
+    5: 'lo',
+    6: 'ch',
+    7: 'sc',
+    8: 'dk'
+
+}
+
+__class_labels_desc = {
+    'hu': 'hungry',
+    'bu': 'needs burping',
+    'bp': 'belly pain',
+    'dc': 'discomfort',
+    'ti': 'tired',
+    'lo': 'lonely',
+    'ch': 'cold/hot',
+    'sc': 'scared',
+    'dk': 'dont know'
+
+}
+
 
 def load_data(_feat_folder, _mono, _fold=None):
-    feat_file_fold = os.path.join(_feat_folder, 'mbe_{}_fold{}.npz'.format('mon' if _mono else 'bin', _fold))
-    dmp = np.load(feat_file_fold)
-    _X_train, _Y_train, _X_test, _Y_test = dmp['arr_0'], dmp['arr_1'], dmp['arr_2'], dmp['arr_3']
-    return _X_train, _Y_train, _X_test, _Y_test
+    feat_file = 'mbe_bin_fold1.npz'
+    dmp = np.load(feat_file)
+    _X_train, _Y_train, _X_test, _Y_test, test_labels = dmp['arr_0'], dmp['arr_1'], dmp['arr_2'], dmp['arr_3'], dmp[
+        'arr_4']
+    return _X_train, _Y_train, _X_test, _Y_test, test_labels
 
 
 def get_model(data_in, data_out, _cnn_nb_filt, _cnn_pool_size, _rnn_nb, _fc_nb):
@@ -46,6 +76,14 @@ def get_model(data_in, data_out, _cnn_nb_filt, _cnn_pool_size, _rnn_nb, _fc_nb):
         spec_x = Bidirectional(
             GRU(_r, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate, return_sequences=True),
             merge_mode='mul')(spec_x)
+        SeqSelfAttention(
+            attention_width=3,
+            attention_type=SeqSelfAttention.ATTENTION_TYPE_MUL,
+            attention_activation=None,
+            kernel_regularizer=keras.regularizers.l2(1e-6),
+            use_attention_bias=False,
+            name='Attention',
+        )(spec_x)
 
     for _f in _fc_nb:
         spec_x = TimeDistributed(Dense(_f))(spec_x)
@@ -75,7 +113,7 @@ def plot_functions(_nb_epoch, _tr_loss, _val_loss, _f1, _er, extension=''):
     plot.legend()
     plot.grid(True)
 
-    plot.savefig('/content/gdrive/My Drive/ML_FinalProject/' + __fig_name + extension)
+    plot.savefig('/content/gdrive/My Drive/ML_FinalProject/models_Multi_AM/' + __fig_name + extension)
     plot.close()
     print('figure name : {}'.format(__fig_name))
 
@@ -93,6 +131,27 @@ def preprocess_data(_X, _Y, _X_test, _Y_test, _seq_len, _nb_ch):
     return _X, _Y, _X_test, _Y_test
 
 
+def getLabels(pred_labels, test_labels):
+    index = 0
+    filename = ""
+    actual_label = ""
+    for arr in pred_labels:
+        _lblwithhigherprob = np.bincount(arr).argmax()
+        print(_lblwithhigherprob)
+        get_label = __class_labels[_lblwithhigherprob]
+        get_label_desc = __class_labels_desc[get_label]
+        # print(test_labels[''])
+        for key, value in dict(np.ndenumerate(test_labels)).items():
+            # value = dict()
+            _index = str(index)
+            filename = value[_index][0]
+            actual_label = value[_index][1]
+            index += 1
+        # info_test = test_labels.get(index)
+        print("File Name-> " + filename + " Predicted label-> " + get_label_desc + " Actual label-> " +
+              __class_labels_desc[actual_label])
+
+
 #######################################################################################
 # MAIN SCRIPT STARTS HERE
 #######################################################################################
@@ -103,7 +162,7 @@ feat_folder = ''
 __fig_name = '{}_{}'.format('mon' if is_mono else 'bin', time.strftime("%Y_%m_%d_%H_%M_%S"))
 
 nb_ch = 1 if is_mono else 2
-batch_size = 128  # Decrease this if you want to run on smaller GPU's
+batch_size = 64  # Decrease this if you want to run on smaller GPU's
 seq_len = 256  # Frame sequence length. Input to the CRNN.
 nb_epoch = 500  # Training epochs
 patience = int(0.25 * nb_epoch)  # Patience for early stopping
@@ -133,12 +192,12 @@ print('MODEL PARAMETERS:\n cnn_nb_filt: {}, cnn_pool_size: {}, rnn_nb: {}, fc_nb
 
 avg_er = list()
 avg_f1 = list()
-for fold in [1, 2, 3, 4]:
+for fold in [1]:
     print('\n\n----------------------------------------------')
     print('FOLD: {}'.format(fold))
     print('----------------------------------------------\n')
     # Load feature and labels, pre-process it
-    X, Y, X_test, Y_test = load_data(feat_folder, is_mono, fold)
+    X, Y, X_test, Y_test, test_labels = load_data(feat_folder, is_mono, fold)
 
     X, Y, X_test, Y_test = preprocess_data(X, Y, X_test, Y_test, seq_len, nb_ch)
 
@@ -150,8 +209,9 @@ for fold in [1, 2, 3, 4]:
     tr_loss, val_loss, f1_overall_1sec_list, er_overall_1sec_list = [0] * nb_epoch, [0] * nb_epoch, [0] * nb_epoch, [
         0] * nb_epoch
     posterior_thresh = 0.5
-    path = '{}_fold_{}_model.h5'.format(__fig_name, fold)
-    f = open('/content/gdrive/My Drive/ML_FinalProject/' + path, 'w')
+    path = '{}_fold_{}_model.h5'.format(__fig_name, '1')
+    f = open('/content/gdrive/My Drive/ML_FinalProject/models_Multi_AM/' + path, 'w')
+
     for i in range(nb_epoch):
         print('Epoch : {} '.format(i), end='')
         hist = model.fit(
@@ -166,6 +226,17 @@ for fold in [1, 2, 3, 4]:
 
         # Calculate the predictions on test data, in order to calculate ER and F scores
         pred = model.predict(X_test)
+        # pred_labels = (pred.argmax(axis=-1)).printoptions(precision=10000000)
+        # pred_labels = np.array2string((pred.argmax(axis=-1)), precision=10000000, separator=',')
+        # pred_labels = np.asarray((pred.argmax(axis=-1)))
+        pred_labels = (pred.argmax(axis=-1))
+        # text=np.array2string(pred_labels)#.set_printoptions(threshold=np.inf)
+        # f2 = open('/content/gdrive/My Drive/ML_FinalProject/models/predictedlabels.txt', 'w')
+
+        # f2.write(str(pred_labels))
+        # f2.close()
+        # getLabels(pred_labels, test_labels)
+
         pred_thresh = pred > posterior_thresh
         score_list = metrics.compute_scores(pred_thresh, Y_test, frames_in_1_sec=frames_1_sec)
 
@@ -184,8 +255,8 @@ for fold in [1, 2, 3, 4]:
             best_er = er_overall_1sec_list[i]
             f1_for_best_er = f1_overall_1sec_list[i]
 
-            model.save('/content/gdrive/My Drive/ML_FinalProject/' + path)
-            f.write(model)
+            model.save('/content/gdrive/My Drive/ML_FinalProject/models_Multi_AM/' + path)
+
             best_epoch = i
             pat_cnt = 0
 
@@ -201,5 +272,6 @@ for fold in [1, 2, 3, 4]:
     print('best_conf_mat: {}'.format(best_conf_mat))
     # print('best_conf_mat_diag: {}'.format(np.diag(best_conf_mat)))
 f.close()
-print('\n\nMETRICS FOR ALL FOUR FOLDS: avg_er: {}, avg_f1: {}'.format(avg_er, avg_f1))
-print('MODEL AVERAGE OVER FOUR FOLDS: avg_er: {}, avg_f1: {}'.format(np.mean(avg_er), np.mean(avg_f1)))
+
+print('\n\nMETRICS : avg_er: {}, avg_f1: {}'.format(avg_er, avg_f1))
+print('MODEL AVERAGE : avg_er: {}, avg_f1: {}'.format(np.mean(avg_er), np.mean(avg_f1)))
