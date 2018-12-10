@@ -121,16 +121,116 @@ y_hat_test = [most_common(pred.argmax(axis=-1)[i]) for i in range((pred.argmax(a
 y_hat_prob_test = [np.mean(pred[i], axis=-2) for i in range((pred.argmax(axis=-1)).shape[0])]
 print("Training Accuracy = {}, F1 score = {}".format(accuracy_score(y_train, y_hat_train),
                                                      f1_score(y_train, y_hat_train, average='weighted')))
-print("Test Accuracy = {}, F1 score = {}".format(accuracy_score(y_test, y_hat_test),
-                                                 f1_score(y_test, y_hat_test, average='weighted')))
+test_acc = "Test Accuracy = {}, F1 score = {}".format(accuracy_score(y_test, y_hat_test),
+                                                 f1_score(y_test, y_hat_test, average='weighted'))
 
+print(test_acc)
+
+count = 0
+f = open(home + "/best_accuracy/results.html", "w+")
+message = """<html>
+        <head>
+      <title>Baby Cry Analysis</title>
+            <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+            <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+            <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+
+        </head>
+        <body>
+        <nav class="navbar navbar-light bg-light">
+              <a class="navbar-brand" href="#">
+                <img src="images/logo.png" width="200" height="80" alt="">
+                        Baby Cry Analysis
+              </a>
+
+          </nav>
+          <div>Overall accuracy: """ + str(test_acc) + """</div>
+          <div class="container-fluid">
+
+
+              <!-- Content here -->
+
+
+             <div class="row">
+               <div class="col-md-12">
+
+            <table class="table" >
+                <tr>
+                    <th scope="col">Audio</th>
+                    <th scope="col">Baby</th>
+                    <th scope="col">Actual label</th>
+                    <th scope="col">Predicted label</th>
+                    <th scope="col">Accuracy</th>
+                </tr>
+            """
+print(len(y_test))
 for i in range(len(y_test)):
-    print("\n\nFile: {}, Actual: {}, Predicted: {}\nPredicted Prob:\n".format(f_test[i], __class_labels_desc[__class_labels[y_test[i]]], __class_labels_desc[__class_labels[y_hat_test[i]]]))
-    for j in range(len(__class_labels.keys())):
+    count += 1
+    print("\n\nFile: {}, Actual: {}, Predicted: {}\nPredicted Prob:\n".format
+          (f_test[i], __class_labels_desc[__class_labels[y_test[i]]],
+           __class_labels_desc[__class_labels[y_hat_test[i]]]))
+    message = message + """<tr>\n""" + """<td width="30%">
+                                            <audio controls>
+                                                <source src="/best_accuracy/images/""" + __class_labels[y_test[i]] + """.wav" autoplay>
+                                            </audio>
+                                        </td>\n
+
+                                        <td width="30%">
+                                        <img src="/best_accuracy/images/""" + __class_labels[y_test[i]] + """.png" class="img-responsive" style="width: 450px">
+                                        </td>\n
+                                        <td width="15%">""" + __class_labels_desc[__class_labels[y_test[i]]] + """
+                                        </td>\n"""
+    message = message + """<td width="30%"> 
+                                        <table>
+
+                                            <tr>
+                                            <td>
+                                            <script type="text/javascript">
+                                                        // Load google charts
+                                                        google.charts.load('current', {'packages':['corechart']});
+                                                        google.charts.setOnLoadCallback(drawChart);
+
+                                                        // Draw the chart and set the chart values
+                                                        function drawChart() {
+                                                          var data = google.visualization.arrayToDataTable([
+                                                          ['Task', 'Probability of each label'],"""
+    total_keys = len(__class_labels.keys())
+    print(total_keys)
+    for j in range(total_keys):
         print("{}: {}".format(__class_labels_desc[__class_labels[j]], y_hat_prob_test[i][j]))
+        # if(j == total_keys - 1):
+        #    message = message + """
+        #                     """+"""["""+"""'"""+str(__class_labels_desc[__class_labels[j]])+"""'""" + ""","""+ str(y_hat_prob_test[i][j]) +"""]"""
+        # else:
+        message = message + """
+                             """ + """[""" + """'""" + str(
+            __class_labels_desc[__class_labels[j]]) + """'""" + """,""" + str(y_hat_prob_test[i][j]) + """],
+
+                                    """
+
+    message = message + """             
+                                        ]);// Optional; add a title and set the width and height of the chart
+                                                          var options = {'title':'The baby is """ + str(
+        __class_labels_desc[__class_labels[y_hat_test[i]]]) + """', 'width':500, 'height':400};
+                                        // Display the chart inside the <div> element with id="piechart"
+                                                          var chart = new google.visualization.PieChart(document.getElementById('piechart""" + str(
+        count) + """'));
+                                                          chart.draw(data, options);
+                                                        }
+                                                </script>
+
+                                                <div id="piechart""" + str(count) + """"></div>
 
 
-
+                                            </td>
+                                            </tr>         
+                                        </table>
+                                </td>\n"""
+    message = message + """<td>""" + str(accuracy_score([y_test[i]], [y_hat_test[i]])) + """</td>\n"""
+    message = message + """</tr>\n"""
+message = message + """</table></div></div></div></body></html>"""
+f.write(message)
+f.close()
 # print(y_train)
 # print(y_hat_train)
 # print(f_train)
