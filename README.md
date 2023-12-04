@@ -87,5 +87,36 @@ The details of the network layers are as follows:
   </tr>
 </table>
 
+## Result
+
+The first model that we developed comprised of 3 layers of CNN followed by 3 layers of RNN and max pooling with a single dense layer as the ultimate layer having sigmoid activation. It was a replica of the model suggested by Adavanne et. al.  [3]. However, the accuracy was too low, around 50%. So, taking inspiration from the CRNN architecture used in audio recognition systems and with the knowledge of methods taught in class we proceeded with the second model.
+
+Our second model was a single layer CNN network followed by 1 layer of LSTM with time distributed dense layers (model depicted above excluding the attention part). We also experimented with the GRU and Bidirectional GRU as GRU has proven in the past to behave better on speech recognition problems. The accuracy in all these experiments exceeded 60% which was quite better than the first model.
+
+Finally, we tried to implement Attention model on top of our second model which gave the maximum boost in accuracy. 
+For the final model, we add Attention layer on top of our 2nd model to achieve highest accuracy. We experimented with different flavors of attention model using different activations, widths and types. As per our analysis both LSTM and GRU result in similar validation accuracy, thus we went with LSTM along with Attention Models for our final model which resulted in validation accuracy of 76%. The table below depicts some of the experiments with significant results.
+
+|Model|Accuracy|F1|
+|:----|:----|:----|
+|1 Layer CRNN with time dist. Layers (Model 2)|73%|.72|
+|Model 2 with Attention Layer|
+|(Attention sequence type = Additive, Attention width =16)|70%|.71|
+|Model 2 with Attention Layer|
+|(Attention sequence type = Multiplicative, Attention width =32)|76%|.75|
+|Bidirectional GRU with Attention Layer|70%|.71|
+|Bidirectional GRU without Attention Layer|69%|.68|
+|GRU with Attention Layer|69%|.69|
+|GRU without Attention Layer|62%|.62|
+
+## Conclusion
+In this paper, we extended convolutional recurrent neural networks to analyse crying baby audios and classified them according to the reason behind the cry.
+To solve the problem of irregular samples in different classes we augmented the data after which the complete data set, including the augmented data was taken as the input. The input was passed through a network to learn sound events with a multichannel audio approach. Using three Layers of LSTM in our network did not give us high accuracy since the limited data as input resulted in over fitting. Thus, a single layer LSTM was used which gave us better results.
+The performance of the network was also measured with and without the attention layer. Adding the attention layer resulted in an increase of the accuracy. Thus, the proposed network with single layer LSTM and attention layer was shown to classify audio events with an accuracy higher than what was achieved using three-layer LSTM network.
+
+## References
+
+<a id="1">[1]</a>  aqibsaeed/Urban-Sound-Classification, https://github.com/aqibsaeed/Urban-Sound-Classification, 2016<br>
+<a id="2">[2]</a>  Yong Xu, Qiuqiang Kong, Qiang Huang, Wenwu Wang, & Mark D. Plumbley (2017) Attention and Localization based on a Deep Convolutional Recurrent Model for Weakly Supervised Audio Tagging. arXiv:1703.06052v1<br>
+<a id="3">[3]</a>  Sharath Adavanne, Pasi Pertilä & Tuomas Virtanen (2017) Sound Event Detection Using Spatial Features and Convolutional Recurrent Neural Network. arXiv:1706.02291v1<br>
 
 
