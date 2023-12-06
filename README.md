@@ -8,7 +8,7 @@ Thus, remote monitor is one common application of automatic infant cry recogniti
 > Classify the baby cry sound into 8 different categories (hungry, needs burping, scared, belly pain, discomfort, cold/hot, lonely, tired).
 
 To address this we explored a number of deep learning approaches such as Convolutional neural networks (CNN), 
-Recurrent Neural Networks (RNN) and Attention Model to achieve th`e best result.
+Recurrent Neural Networks (RNN) and Attention Model to achieve the best result.
 
 ## Data Source
 
